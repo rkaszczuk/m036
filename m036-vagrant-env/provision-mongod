@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# Bash script for provisioning the MongoDB instances
+
+set -e
+set -x
+
+
+function config(){
+  export CLIENT_IP_ADDR=`ifconfig  | grep 'inet addr:'| grep -v '127.0.0.1' | cut -d: -f2 | awk '{ print $1}' | tail -1`
+  export CLIENT_FQDN=`hostname`
+  export CLIENT_NAME=`hostname | cut -d. -f 1 | tr '[:upper:]' '[:lower:]'`
+  echo "Configuring /etc/hosts ..."
+  echo "127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4" > /etc/hosts
+  echo "::1       localhost localhost.localdomain localhost6 localhost6.localdomain6" >> /etc/hosts
+  echo "$CLIENT_IP_ADDR    $CLIENT_FQDN $CLIENT_NAME" >> /etc/hosts
+}
+
+
+function install_mongod(){
+  echo "Install MongoDB Enterprise"
+  # install MongoDB using apt-get so it installs with service support and has a
+  # default configuration file in /etc/
+  # have to force-yes -y to force install of unsigned packages (our 3.4 key does
+  # not match, no 3.6 key in the docs) and to agree to install
+  sudo apt-get install --force-yes -y mongodb-enterprise
+
+  echo "Done installing MongoDB Enterprise"
+}
+
+
+function user_setup(){
+  sudo sh -c "killall mongod; true"
+  sudo mkdir -p /data
+  sudo chmod -R 777 /data
+  mkdir -p /data/db
+  mkdir -p /home/vagrant/data
+  chmod -R 777 /home/vagrant/data
+  chown -R vagrant:vagrant /home/vagrant/data
+  echo "Set LC_ALL=C to .profile"
+  sudo echo "export LC_ALL=C" >> /home/vagrant/.profile
+}
+
+
+function update_repo(){
+  echo "Install MongoDB Enterprise Repository"
+  # set to track mongodb development (rc)
+  echo "deb [ arch=amd64 ] http://repo.mongodb.com/apt/ubuntu trusty/mongodb-enterprise/3.6 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-enterprise.list
+  sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
+
+  echo "Update Repositories"
+  sudo apt-get update -y
+  echo "Installing MongoDB Enterprise Dependencies"
+  sudo apt-get install -y libgssapi-krb5-2 libsasl2-2 libssl1.0.0 libstdc++6 snmp
+}
+
+
+function config(){
+  sudo su
+  # disable THP
+  echo -e "never" > /sys/kernel/mm/transparent_hugepage/enabled
+  echo -e "never" > /sys/kernel/mm/transparent_hugepage/defrag
+  # disable mongod upstart service
+  echo 'manual' | sudo tee /etc/init/mongod.override
+}
+
+
+function download_dataset() {
+  echo "Download Dataset"
+  curl -o m036.tgz https://s3.amazonaws.com/university-courses/handouts/M036.tgz
+  tar -xzvf m036.tgz  -C /dataset
+  rm -rf m036.tgz
+  echo "Done: Download Dataset"
+}
+
+
+function data_path() {
+  sudo mkdir -p /data
+  sudo chown -R vagrant:vagrant /data
+}
+
+
+function generate_validator() {
+  echo "#!/bin/bash
+        echo -n 'm036 rocks' | openssl sha256 | sed -e s/\(stdin\)=.//" > /usr/local/bin/validate_box.bash
+  chmod +x /usr/local/bin/validate_box.bash
+}
+
+function change_streams_env() {
+    sudo mkdir -p /var/m036/changestreams/{0,1,2}
+    sudo chown -R vagrant:vagrant /var/m036
+    echo "Download Services"
+    curl https://s3.amazonaws.com/university-courses/m036/streamer.tgz -o /tmp/streamer.tgz
+    tar xzf /tmp/streamer.tgz
+    sudo mv streamer/streamer.conf /etc/init/
+    sudo mv streamer/streamer.py /var/m036/changestreams/.streamer.py
+    rm -rf /tmp/streamer.tgz
+    sudo chmod 0001 /var/m036/changestreams/.streamer.py
+}
+
+
+function network_restrictions_env() {
+    sudo mkdir -p /var/m036/auth
+    sudo chown vagrant:vagrant /var/m036/auth
+    # download validator
+    sudo curl https://s3.us-east-2.amazonaws.com/m036/restrictive -o /tmp/restrictive
+    sudo chmod +x /tmp/restrictive
+    # install on /usr/bin
+    sudo mv /tmp/restrictive /usr/bin/
+}
+
+function install_python_dependencies() {
+  echo "Download get-pip.py"
+  curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
+  echo "Install pip"
+  sudo python get-pip.py
+  rm -f get-pip.py
+  echo "Install requirements"
+  pip install docopt faker
+  pip install https://github.com/mongodb/mongo-python-driver/zipball/master # TODO: remove this after pymongo hits 3.6 GA
+}
+
+config
+update_repo
+install_mongod
+user_setup
+download_dataset
+data_path
+change_streams_env
+network_restrictions_env
+install_python_dependencies
+generate_validator
+echo "DONE"
