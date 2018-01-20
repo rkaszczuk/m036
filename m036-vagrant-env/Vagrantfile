@@ -3,7 +3,7 @@ Vagrant.configure("2") do |config|
   config.vm.box_check_update = false
   config.vm.synced_folder "shared/", "/shared", create: true
   config.vm.synced_folder "dataset/", "/dataset", create: true
-
+config.vm.network "forwarded_port", guest: 22, host: 2222, host_ip: "127.0.0.1", id: 'ssh'	
   config.vm.define "mongod-m036" do |server|
     server.vm.provider "hyperv" do |vb|
        vb.vmname = "mongod-m036"
