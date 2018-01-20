@@ -109,6 +109,14 @@ function network_restrictions_env() {
     sudo mv /tmp/restrictive /usr/bin/
 }
 
+function compile_and_instal_python_2_7_14() 
+{
+	sudo add-apt-repository ppa:jonathonf/python-2.7
+	sudo apt-get update
+	sudo apt-get install -y python2.7
+	python --version
+}
+
 function install_python_dependencies() {
   echo "Download get-pip.py"
   curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
@@ -128,6 +136,7 @@ download_dataset
 data_path
 change_streams_env
 network_restrictions_env
+compile_and_instal_python_2_7_14
 install_python_dependencies
 generate_validator
 echo "DONE"
