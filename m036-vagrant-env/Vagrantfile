@@ -9,9 +9,10 @@ config.vm.network "forwarded_port", guest: 22, host: 2222, host_ip: "127.0.0.1",
        vb.vmname = "mongod-m036"
 	   vb.cpus = 2
        vb.memory = 2048
+	   vb.enable_virtualization_extensions = true
     end
     server.vm.hostname = "m036.mongodb.university"
-    server.vm.network :private_network, ip: "192.168.36.100"
+    server.vm.network "public_network"
     server.vm.provision :shell, path: "provision-mongod", args: ENV['ARGS']
   end
 end
